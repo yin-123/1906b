@@ -1,102 +1,63 @@
-2020-06-09日报：
----------------------------08、单点登录------------------------------
-一、单点登录介绍
-	1、什么是单点登录？
-		SSO英文全称Single Sign On，单点登录，登录一次处处可用
+2020-06-16日报：
+1.订单分析
 
-	2、思路
-		存(登录)：redis(token,user)       cookie(token_key,token)
-					
-		取(查询用户)：cookie(token)--------->redis(user)
-工程搭建
-注册信息校验
-	/**
-     * 对用户的注册信息(用户名与电话号码)做数据校验
-     */
-    @Override
-    public boolean checkUserInfo(@PathVariable String checkValue,@PathVariable Integer checkFlag) {
-        TbUserExample example = new TbUserExample();
-        TbUserExample.Criteria criteria = example.createCriteria();
-        // 1、查询条件根据参数动态生成：1、2分别代表username、phone
-        if (checkFlag == 1) {
-            criteria.andUsernameEqualTo(checkValue);
-        } else if (checkFlag == 2) {
-            criteria.andPhoneEqualTo(checkValue);
-        }
-        // 2、从tb_user表中查询数据
-        List<TbUser> list = tbUserMapper.selectByExample(example);
-        // 3、判断查询结果，如果查询到数据返回false。
-        if (list == null || list.size() == 0) {
-            // 4、如果没有返回true。
-            return true;
-        }
-        // 5、如果有返回false。
-        return false;
-    }
-用户注册
-	/**
-     * 用户注册
-     */
-    @Override
-    public Integer userRegister(TbUser user) {
-        //将密码做加密处理。
-        String pwd = MD5Utils.digest(user.getPassword());
-        user.setPassword(pwd);
-        //补齐数据
-        user.setCreated(new Date());
-        user.setUpdated(new Date());
-        return this.tbUserMapper.insert(user);
-    }
-用户登录
-	@Override
-    public Map userLogin(String username, String password) {
-        // 1、判断用户名密码是否正确。
-        String pwd = MD5Utils.digest(password);
-        TbUserExample example = new TbUserExample();
-        TbUserExample.Criteria criteria = example.createCriteria();
-        criteria.andUsernameEqualTo(username);
-        criteria.andPasswordEqualTo(pwd);
-        List<TbUser> userList = this.tbUserMapper.selectByExample(example);
-        if(userList == null || userList.size() <= 0){
-            return null;
-        }
-        TbUser tbUser = userList.get(0);
-        // 2、登录成功后生成token。Token相当于原来的jsessionid，字符串，可以使用uuid。
-        String token = UUID.randomUUID().toString();
-        // 3、把用户信息保存到redis。Key就是token，value就是TbUser对象转换成json。
-        tbUser.setPassword(null);
-        redisClient.set(USER_INFO + ":" + token, tbUser);
-        // 5、设置key的过期时间。模拟Session的过期时间。
-        redisClient.expire(USER_INFO + ":" + token, SESSION_EXPIRE);
+1.1.订单功能
 
-        Map<String,String> map = new HashMap<String,String>();
-        map.put("token",token);
-        map.put("userid",tbUser.getId().toString());
-        map.put("username",tbUser.getUsername());
-        return map;
-    }
-通过token查询用户信息
-	/**
-     * 查询用户登录是否过期
-     * @param token
-     * @return
-     */
-    @Override
-    public TbUser getUserByToken(String token) {        
-        TbUser tbUser = (TbUser) redisClient.get(USER_INFO + ":" + token);
-        if(tbUser!=null){
-            //需要重置key的过期时间。
-            redisClient.expire(USER_INFO+":"+token,SESSION_EXPIRE);
-            return tbUser;
-        }
-        return null;
-    }
-退出登录
-	/**
-     * 用户退出登录
-     * @param token
-     */
-    @Override
-    public Boolean logOut(String token) {
-       return redisClient.del(USER_INFO + ":" + token);
-    }
+1、在购物车页面点击“去结算”按钮跳转到订单确认页面
+
+	a) 展示商品列表
+
+	b) 配送地址列表
+
+    c) 选择支付方式
+
+2、订单确认页面需要根据用户查询配送地址，展示订单确认页面之前，应该确认用户身份
+
+	a) 如果用户未登录或登录过期跳转到登录页面
+
+	d) 登录成功后再跳转到订单确认页面
+
+3、提交订单
+
+	a) 生成订单
+
+4、扣减库存
+
+5、关闭超时订单
+
+	a) 定时扫描超时2天未付款的订单，并关闭订单
+
+	b) 加回库存
+2.用户身份认证
+
+在展示订单确认页面之前，需要对用户身份进行认证，要求用户必须登录。
+
+2.1.功能分析
+
+1、使用springmvc的拦截器拦截所有订单的请求
+
+2、业务逻辑
+
+	a)  从cookie中取token。
+
+	b) 根据token调用sso服务查询用户信息。
+
+	d) 如果查不到用户信息则跳转到登录页面。
+
+	e) 查询到用户信息放行。
+3.展示订单确认页面
+
+3.1.功能分析
+
+1、在购物车页面点击“去结算”按钮跳转到订单确认页面。
+
+2、请求的url：/frontend/order/goSettlement
+
+3、参数：ids，userId，token
+
+4、查询redis中的购物车数据并返回给前端
+
+5、配送地址列表，需要用户登录。需要根据用户id查询收货地址列表。静态数据。
+
+6、支付方式。静态数据。
+
