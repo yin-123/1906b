@@ -1,0 +1,79 @@
+2020-06-24日报：
+------------------------13、mysql主从复制、mycat读写分离、mycat分库分表-------------------------------------------
+一、主从复制
+	1、安装mysql
+		a、解压
+			tar -zxvf mysql-5.6.31-linux-glibc2.5-x86_64.tar.gz -C /usr/java
+			mv mysql-5.6.31-linux-glibc2.5-x86_64 mysql
+                b、拷贝配置文件到etc
+			cp support-files/my-default.cnf /etc/my.cnf
+			cp support-files/mysql.server /etc/rc.d/init.d/mysql
+			vim /etc/my.cnf
+				basedir = /usr/java/mysql
+				datadir = /usr/java/mysql/data
+				log-error = /usr/java/mysql/data/error.log
+				pid-file = /usr/java/mysql/data/mysql.pid
+				user = root
+				tmpdir = /tmp
+		c、初始化mysql
+			./scripts/mysql_install_db --user=root --basedir=/usr/java/mysql --datadir=/usr/java/mysql/data --pid-file=/usr/java/mysql/data/mysql.pid --tmpdir=/tmp
+		
+		d、配置mysql命令支持
+			ln -s /usr/java/mysql/bin/mysql /usr/bin/mysql
+		e、修改密码
+			mysql -u root
+			use mysql;
+			update user set password= password("1111") where user='root';
+			flush privileges;
+		f、开启远程登录权限
+			GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' IDENTIFIED BY '1111' WITH GRANT OPTION;
+			flush privileges;
+		g、设置开机启动
+			chkconfig mysql on
+		d、启动和关闭mysql
+			service mysql start|stop|restart
+
+	2、配置mysql主从复制
+		a、配置主数据库
+			开启日志、修改server_id
+				vim /etc/my.cnf：
+					log_bin=master_log
+					server_id=1
+					
+		b、配置从数据库
+			修改server_id：
+				vim /etc/my.cnf：
+					server_id=1
+			修改uuid：
+				vim mysql/data/auto.cnf：
+					uuid=xxxxxxxxx
+			重启：
+				service mysql restart
+		c、修改slave
+				mysql> change master to master_host='192.168.204.139',master_user='root',master_password='1111',master_log_file='master_log.00001'
+
+		d、查看主从状态
+			mysql> show slave status \G;
+
+二、MyCat
+	1、什么是MyCat？
+		是一个国产的数据库中间件，前身是阿里的cobar。
+	2、分库分表
+		分库：把usian拆成多个库
+		分表：把tb_order拆分到多个库里
+
+	3、mycat的核心概念
+		schema：逻辑上完整的库
+		table：逻辑上完整的表
+		dataHost：服务器
+		dataNode：服务器上的mysql
+		rule：分片规则
+	4、分片规则
+		crc32slot规则：
+			分片字段使用主键
+			tableRule：一个表一个
+			数据库节点数量
+	5、配置mycat的分库分表和读写分离
+		a、schema.xml作用：逻辑库、逻辑表、dataNode、分片规则
+		b、rule.xml：分片规则
+		c、server.xml：mycat的用户名、密码和权限
